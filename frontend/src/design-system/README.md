@@ -1,6 +1,6 @@
 # Design System
 
-Reusable UI components (Button, Input, Select, Modal) and their styles.
+Reusable UI components (Button, Dropdown, Input, Loader, Toast, Tooltip) and their styles.
 
 ## Folder structure
 
@@ -15,22 +15,29 @@ design-system/
 │   │   ├── button.types.ts
 │   │   └── index.ts
 │   │
+│   ├── dropdown/
+│   │   └── .gitkeep
+│   │
 │   ├── input/
 │   │   ├── Input.tsx
 │   │   ├── input.styles.ts
 │   │   ├── input.types.ts
 │   │   └── index.ts
 │   │
-│   ├── select/
-│   │   ├── Select.tsx
-│   │   ├── select.styles.ts
-│   │   ├── select.types.ts
+│   ├── loader/
+│   │   ├── Loader.tsx
+│   │   ├── loader.styles.ts
 │   │   └── index.ts
 │   │
-│   └── modal/
-│       ├── Modal.tsx
-│       ├── modal.styles.ts
-│       ├── modal.types.ts
+│   ├── toast/
+│   │   ├── Toast.tsx
+│   │   ├── toast.styles.ts
+│   │   ├── use-toast.ts
+│   │   └── index.ts
+│   │
+│   └── tooltip/
+│       ├── Tooltip.tsx
+│       ├── tooltip.styles.ts
 │       └── index.ts
 │
 ├── utils/
@@ -64,15 +71,8 @@ npm install -D tailwindcss @tailwindcss/vite
 - **clsx** + **tailwind-merge** — used in `cn.ts`
 - **class-variance-authority** — used for button/input variants
 
-**For Modal and Select (keyboard, focus, overlay)**
-
-```bash
-npm install @radix-ui/react-dialog @radix-ui/react-select
-```
-
-
 ## Import example
 
 ```ts
-import { Button, Input, Select, Modal } from "../design-system";
+import { Button, Input, Loader, Tooltip, ToastProvider, useToast } from "../design-system";
 ```

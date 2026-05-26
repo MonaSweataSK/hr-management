@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* Small sensible defaults for the app shell */
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
