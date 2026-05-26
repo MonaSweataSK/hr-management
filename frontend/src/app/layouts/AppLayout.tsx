@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Header from "./Header";
 import Footer from "./Footer";
 import DashboardPage from "../../pages/DashboardPage";
@@ -12,7 +12,10 @@ export default function AppLayout() {
             <main className="flex-1 mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8">
                 <Routes>
                     <Route path="/" element={<DashboardPage />} />
-                    <Route path="/design-system" element={<DesignSystemPage />} />
+                    {import.meta.env.DEV && (
+                        <Route path="/design-system" element={<DesignSystemPage />} />
+                    )}
+                    <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
             </main>
 
@@ -20,3 +23,4 @@ export default function AppLayout() {
         </div>
     );
 }
+

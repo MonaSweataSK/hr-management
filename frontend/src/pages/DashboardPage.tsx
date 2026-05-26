@@ -4,9 +4,10 @@ export default function DashboardPage() {
       <div className="space-y-2">
         <h1 className="text-xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
         <p className="text-xs text-slate-500 max-w-xs mx-auto">
-          Your HR workspace. Content coming soon.
+          Your Workly workspace. Content coming soon.
         </p>
       </div>
     </div>
   );
 }
+
