@@ -25,6 +25,22 @@ export default function Header() {
                     >
                         Dashboard
                     </NavLink>
+                    <NavLink
+                        to="/employees"
+                        className={({ isActive }) =>
+                            `text-sm font-semibold transition-colors hover:text-slate-900 ${isActive ? "text-slate-900" : "text-slate-500"}`
+                        }
+                    >
+                        Employees
+                    </NavLink>
+                    <NavLink
+                        to="/insights"
+                        className={({ isActive }) =>
+                            `text-sm font-semibold transition-colors hover:text-slate-900 ${isActive ? "text-slate-900" : "text-slate-500"}`
+                        }
+                    >
+                        Insights
+                    </NavLink>
                     {isDev && (
                         <NavLink
                             to="/design-system"
@@ -45,6 +61,22 @@ export default function Header() {
                         }
                     >
                         Dashboard
+                    </NavLink>
+                    <NavLink
+                        to="/employees"
+                        className={({ isActive }) =>
+                            `text-xs font-semibold px-2.5 py-1.5 rounded transition-colors ${isActive ? "bg-slate-100 text-slate-900" : "text-slate-500"}`
+                        }
+                    >
+                        Employees
+                    </NavLink>
+                    <NavLink
+                        to="/insights"
+                        className={({ isActive }) =>
+                            `text-xs font-semibold px-2.5 py-1.5 rounded transition-colors ${isActive ? "bg-slate-100 text-slate-900" : "text-slate-500"}`
+                        }
+                    >
+                        Insights
                     </NavLink>
                     {isDev && (
                         <NavLink
