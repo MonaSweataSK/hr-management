@@ -3,12 +3,13 @@ import Header from "./Header";
 import Footer from "./Footer";
 import DashboardPage from "../../pages/DashboardPage";
 import EmployeesPage from "../../pages/EmployeesPage";
+import EmployeeDetailPage from "../../pages/EmployeeDetailPage";
 import InsightsPage from "../../pages/InsightsPage";
 import DesignSystemPage from "../../pages/DesignSystemPage";
 
 export default function AppLayout() {
     const location = useLocation();
-    const isEmployeesPage = location.pathname === "/employees";
+    const isEmployeesPage = location.pathname.startsWith("/employees");
 
     return (
         <div className={`min-h-dvh ${isEmployeesPage ? "h-dvh overflow-hidden" : ""} bg-slate-50 text-slate-900 flex flex-col font-sans`}>
@@ -18,6 +19,7 @@ export default function AppLayout() {
                 <Routes>
                     <Route path="/" element={<DashboardPage />} />
                     <Route path="/employees" element={<EmployeesPage />} />
+                    <Route path="/employees/:id" element={<EmployeeDetailPage />} />
                     <Route path="/insights" element={<InsightsPage />} />
                     {import.meta.env.DEV && (
                         <Route path="/design-system" element={<DesignSystemPage />} />

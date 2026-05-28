@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, RefreshCw, Users, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getEmployees, getJobTitles, getCountries } from '../features/employees/api/getEmployees';
+import { useNavigate } from 'react-router-dom';
+import { Search, Filter, RefreshCw, Users, AlertCircle, ChevronLeft, ChevronRight, Edit2, Trash2, X, Loader2 } from 'lucide-react';
+import { getEmployees, getJobTitles, getCountries, updateEmployee, deleteEmployee } from '../features/employees/api/getEmployees';
 import type { Employee, JobTitle, Country } from '../features/employees/types/employee.types';
 
 const PAGE_SIZE = 100;
 
 export default function EmployeesPage() {
+  const navigate = useNavigate();
   // Reference data for filter dropdowns
   const [countries, setCountries] = useState<Country[]>([]);
   const [jobTitles, setJobTitles] = useState<JobTitle[]>([]);
@@ -32,6 +34,26 @@ export default function EmployeesPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Edit employee state
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editDept, setEditDept] = useState('');
+  const [editJobTitleId, setEditJobTitleId] = useState('');
+  const [editCountryId, setEditCountryId] = useState('');
+  const [editSalary, setEditSalary] = useState('');
+  const [editCurrency, setEditCurrency] = useState('USD');
+  const [editStatus, setEditStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [editHiredAt, setEditHiredAt] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Delete employee state
+  const [deletingEmployee, setDeletingEmployee] = useState<Employee | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Disable page-level scroll while on this page
   useEffect(() => {
@@ -113,11 +135,6 @@ export default function EmployeesPage() {
     setAppliedCountry(''); setAppliedStatus('');
   };
 
-  const hasFilters = !!(pendingSearch || pendingDept || pendingJobTitle || pendingCountry || pendingStatus);
-
-  // Format salary currency
-  const formatCurrency = (val: number, currencyCode = 'USD') =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode, maximumFractionDigits: 0 }).format(Number(val));
 
   // Build paginator page numbers with ellipsis
   const getPageNumbers = (): (number | '...')[] => {
@@ -130,12 +147,85 @@ export default function EmployeesPage() {
     return pages;
   };
 
+  // Handlers for Edit
+  const handleEditClick = (e: React.MouseEvent, emp: Employee) => {
+    e.stopPropagation();
+    setEditingEmployee(emp);
+    setEditFullName(emp.fullName);
+    setEditEmail(emp.email);
+    setEditPhone(emp.phone || '');
+    setEditDept(emp.department || '');
+    setEditJobTitleId(String(emp.jobTitleId));
+    setEditCountryId(String(emp.countryId));
+    setEditSalary(String(emp.salary));
+    setEditCurrency(emp.currency || 'USD');
+    setEditStatus(emp.status);
+    setEditHiredAt(emp.hiredAt ? emp.hiredAt.split('T')[0] : '');
+    setSaveError(null);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const updated = await updateEmployee(editingEmployee.id, {
+        fullName: editFullName,
+        email: editEmail,
+        phone: editPhone || null,
+        department: editDept || null,
+        jobTitleId: Number(editJobTitleId),
+        countryId: Number(editCountryId),
+        salary: Number(editSalary),
+        currency: editCurrency,
+        status: editStatus,
+        hiredAt: editHiredAt ? new Date(editHiredAt).toISOString() : null,
+      });
+
+      // Update the local list
+      setEmployees((prev) =>
+        prev.map((emp) => (emp.id === editingEmployee.id ? { ...emp, ...updated } : emp))
+      );
+      setEditingEmployee(null);
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to update employee details.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handlers for Delete
+  const handleDeleteClick = (e: React.MouseEvent, emp: Employee) => {
+    e.stopPropagation();
+    setDeletingEmployee(emp);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingEmployee) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteEmployee(deletingEmployee.id);
+      setEmployees((prev) => prev.filter((emp) => emp.id !== deletingEmployee.id));
+      setTotalCount((t) => Math.max(0, t - 1));
+      setDeletingEmployee(null);
+    } catch (err: any) {
+      setDeleteError(err.message || 'Failed to delete employee.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const selectClass =
     'w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100';
   const labelClass = 'block text-xs font-semibold text-slate-600 mb-1.5';
+  const inputClass =
+    'w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100';
 
   return (
-    <div className="flex-1 flex min-h-0 gap-5">
+    <div className="flex-1 flex min-h-0 gap-5 relative">
 
       {/* ────────────────────── Left Sidebar Filters ────────────────────── */}
       <aside className="w-52 flex-shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm p-4 flex flex-col justify-between">
@@ -248,13 +338,13 @@ export default function EmployeesPage() {
           {/* Sticky Column Headers */}
           <div className="flex-shrink-0 flex border-b border-slate-200 bg-slate-50/80 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-400 select-none">
             <div className="w-[10%]">Emp No</div>
-            <div className="w-[16%]">Full Name</div>
+            <div className="w-[18%]">Full Name</div>
             <div className="w-[21%]">Email Address</div>
-            <div className="w-[13%]">Department</div>
-            <div className="w-[17%]">Job Title</div>
+            <div className="w-[14%]">Department</div>
+            <div className="w-[16%]">Job Title</div>
             <div className="w-[9%]">Country</div>
-            <div className="w-[9%] text-right">Salary</div>
             <div className="w-[5%] text-center">Status</div>
+            <div className="w-[7%] text-center">Actions</div>
           </div>
 
           {/* Scrollable Rows */}
@@ -287,7 +377,8 @@ export default function EmployeesPage() {
               employees.map((employee) => (
                 <div
                   key={employee.id}
-                  className="flex items-center border-b border-slate-100 px-5 py-3 text-sm text-slate-700 transition-colors hover:bg-slate-50/60 last:border-b-0"
+                  onClick={() => navigate(`/employees/${employee.id}`)}
+                  className="flex items-center border-b border-slate-100 px-5 py-3 text-sm text-slate-700 transition-colors hover:bg-indigo-50/60 cursor-pointer last:border-b-0"
                 >
                   {/* Emp No */}
                   <div className="w-[10%] pr-3">
@@ -296,11 +387,11 @@ export default function EmployeesPage() {
                     </span>
                   </div>
                   {/* Full Name */}
-                  <div className="w-[16%] font-semibold text-slate-900 pr-3 truncate">{employee.fullName}</div>
+                  <div className="w-[18%] font-semibold text-slate-900 pr-3 truncate">{employee.fullName}</div>
                   {/* Email */}
                   <div className="w-[21%] text-slate-500 pr-3 truncate">{employee.email}</div>
                   {/* Department */}
-                  <div className="w-[13%] pr-3 truncate">
+                  <div className="w-[14%] pr-3 truncate">
                     {employee.department ? (
                       <span className="inline-flex rounded-full bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
                         {employee.department}
@@ -310,16 +401,12 @@ export default function EmployeesPage() {
                     )}
                   </div>
                   {/* Job Title */}
-                  <div className="w-[17%] text-slate-600 pr-3 truncate">
+                  <div className="w-[16%] text-slate-600 pr-3 truncate">
                     {employee.jobTitle?.title || <span className="text-slate-400">—</span>}
                   </div>
                   {/* Country */}
                   <div className="w-[9%] text-slate-700 font-medium pr-3 truncate">
                     {employee.country?.name || <span className="text-slate-400">—</span>}
-                  </div>
-                  {/* Salary */}
-                  <div className="w-[9%] text-right font-semibold text-emerald-600 pr-3">
-                    {formatCurrency(employee.salary, employee.currency)}
                   </div>
                   {/* Status */}
                   <div className="w-[5%] flex justify-center">
@@ -331,6 +418,23 @@ export default function EmployeesPage() {
                     ) : (
                       <span className="h-2.5 w-2.5 rounded-full bg-slate-300" title="Inactive" />
                     )}
+                  </div>
+                  {/* Actions */}
+                  <div className="w-[7%] flex items-center justify-center gap-1.5">
+                    <button
+                      onClick={(e) => handleEditClick(e, employee)}
+                      className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                      title="Edit Employee"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteClick(e, employee)}
+                      className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                      title="Delete Employee"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               ))
@@ -398,6 +502,225 @@ export default function EmployeesPage() {
           )}
         </div>
       </div>
+
+      {/* ────────────────────── Edit Employee Modal ────────────────────── */}
+      {editingEmployee && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">Edit Employee</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Update details for {editingEmployee.employeeNo}</p>
+              </div>
+              <button
+                onClick={() => setEditingEmployee(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-4">
+              {saveError && (
+                <div className="rounded-lg bg-rose-50 border border-rose-100 p-3 flex gap-2 text-xs font-semibold text-rose-700">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+                  <div>{saveError}</div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Full Name */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass}>Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFullName}
+                    onChange={(e) => setEditFullName(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                {/* Email */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass}>Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                {/* Phone */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass}>Phone Number</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                {/* Department */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass}>Department</label>
+                  <select
+                    value={editDept}
+                    onChange={(e) => setEditDept(e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="">No Department</option>
+                    {departments.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Job Title */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass}>Job Title *</label>
+                  <select
+                    required
+                    value={editJobTitleId}
+                    onChange={(e) => setEditJobTitleId(e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="">Select Job Title</option>
+                    {jobTitles.map((t) => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Country */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass}>Country *</label>
+                  <select
+                    required
+                    value={editCountryId}
+                    onChange={(e) => setEditCountryId(e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="">Select Country</option>
+                    {countries.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Salary */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass}>Salary *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={editSalary}
+                    onChange={(e) => setEditSalary(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                {/* Currency */}
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass}>Currency</label>
+                  <input
+                    type="text"
+                    maxLength={3}
+                    value={editCurrency}
+                    onChange={(e) => setEditCurrency(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+
+                {/* Status */}
+                <div className="col-span-2">
+                  <label className={labelClass}>Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
+                    className={selectClass}
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingEmployee(null)}
+                  disabled={isSaving}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-semibold shadow-sm shadow-indigo-100 transition-colors disabled:bg-indigo-400"
+                >
+                  {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ────────────────────── Delete Employee Modal ────────────────────── */}
+      {deletingEmployee && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 text-center border border-slate-100 space-y-4">
+            <div className="mx-auto h-12 w-12 rounded-full bg-rose-50 flex items-center justify-center text-rose-500">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-slate-800">Delete Employee</h3>
+              <p className="text-sm text-slate-500">
+                Are you sure you want to delete employee <strong className="text-slate-700">{deletingEmployee.fullName}</strong> ({deletingEmployee.employeeNo})?
+                This action is permanent and cannot be undone.
+              </p>
+            </div>
+
+            {deleteError && (
+              <div className="rounded-lg bg-rose-50 border border-rose-100 p-3 text-xs font-semibold text-rose-700 text-left">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingEmployee(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 text-white hover:bg-rose-700 rounded-lg text-sm font-semibold shadow-sm shadow-rose-100 transition-colors disabled:bg-rose-400"
+              >
+                {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
