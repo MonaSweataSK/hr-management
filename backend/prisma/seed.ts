@@ -16,6 +16,8 @@ const prisma = new PrismaClient({ adapter });
 // Helper arrays for random data
 const firstNames = ['John', 'Jane', 'Alex', 'Emily', 'Michael', 'Sarah', 'David', 'Laura', 'Robert', 'Olivia'];
 const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Miller', 'Davis', 'Garcia', 'Rodriguez', 'Lee'];
+const indianFirstNames = ['Aarav', 'Vihaan', 'Aditya', 'Sai', 'Arjun', 'Ananya', 'Diya', 'Ishaan', 'Aanya', 'Rahul', 'Neha', 'Priya', 'Amit', 'Sanjay', 'Vikram', 'Anjali', 'Karan', 'Sneha', 'Rohan', 'Divya'];
+const indianLastNames = ['Sharma', 'Verma', 'Kumar', 'Singh', 'Patel', 'Reddy', 'Nair', 'Gupta', 'Joshi', 'Rao', 'Choudhury', 'Mehta', 'Gill', 'Sen', 'Das', 'Mishra', 'Prasad', 'Pillai', 'Bose', 'Deshmukh'];
 const departments = ['Engineering', 'Marketing', 'Sales', 'HR', 'Finance', 'Support'];
 
 async function main() {
@@ -42,7 +44,10 @@ async function main() {
   await prisma.jobTitle.createMany({ data: jobTitlesData, skipDuplicates: true });
 
   // Fetch IDs for random assignment
-  const countryIds = (await prisma.country.findMany({ select: { id: true } })).map(c => c.id);
+  const countries = await prisma.country.findMany({ select: { id: true, code: true } });
+  const countryIds = countries.map(c => c.id);
+  const indiaCountry = countries.find(c => c.code === 'IN');
+  const indiaCountryId = indiaCountry ? indiaCountry.id : null;
   const jobTitleIds = (await prisma.jobTitle.findMany({ select: { id: true } })).map(j => j.id);
 
   // ---- 2️⃣ Build 10,000 employee objects (using createMany for bulk insert) ----
@@ -50,14 +55,19 @@ async function main() {
   const employees: Prisma.EmployeeCreateManyInput[] = [];
 
   for (let i = 1; i <= EMP_COUNT; i++) {
-    const fn = firstNames[Math.floor(Math.random() * firstNames.length)];
-    const ln = lastNames[Math.floor(Math.random() * lastNames.length)];
+    const countryId = countryIds[Math.floor(Math.random() * countryIds.length)];
+    const isIndian = countryId === indiaCountryId;
+
+    const fnList = isIndian ? indianFirstNames : firstNames;
+    const lnList = isIndian ? indianLastNames : lastNames;
+
+    const fn = fnList[Math.floor(Math.random() * fnList.length)];
+    const ln = lnList[Math.floor(Math.random() * lnList.length)];
     const fullName = `${fn} ${ln}`;
     const email = `${fn.toLowerCase()}.${ln.toLowerCase()}${i}@example.com`;
     const phone = randomPhone();
     const department = departments[Math.floor(Math.random() * departments.length)];
     const salary = (Math.random() * 90000 + 30000).toFixed(2); // 30k‑120k
-    const countryId = countryIds[Math.floor(Math.random() * countryIds.length)];
     const jobTitleId = jobTitleIds[Math.floor(Math.random() * jobTitleIds.length)];
 
     employees.push({

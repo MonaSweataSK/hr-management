@@ -354,4 +354,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
+router.post('/debug-log', (req: Request, res: Response) => {
+  console.log('--- FRONTEND DEBUG LOG ---', req.body);
+  res.sendStatus(200);
+});
+
 export default router;

@@ -1,73 +1,59 @@
-import { useState, useEffect, useMemo } from 'react';
-import { List } from 'react-window';
-import { Search, SlidersHorizontal, RefreshCw, Users, Activity, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Filter, RefreshCw, Users, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getEmployees, getJobTitles, getCountries } from '../features/employees/api/getEmployees';
 import type { Employee, JobTitle, Country } from '../features/employees/types/employee.types';
 
+const PAGE_SIZE = 100;
+
 export default function EmployeesPage() {
-  // State for reference data
+  // Reference data for filter dropdowns
   const [countries, setCountries] = useState<Country[]>([]);
   const [jobTitles, setJobTitles] = useState<JobTitle[]>([]);
   const [departments, setDepartments] = useState<string[]>([]);
 
-  // State for fetched employee list
+  // Pending filter values (in sidebar, committed on Apply)
+  const [pendingSearch, setPendingSearch] = useState('');
+  const [pendingDept, setPendingDept] = useState('');
+  const [pendingJobTitle, setPendingJobTitle] = useState('');
+  const [pendingCountry, setPendingCountry] = useState('');
+  const [pendingStatus, setPendingStatus] = useState('');
+
+  // Applied filters (sent to the API)
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [appliedDept, setAppliedDept] = useState('');
+  const [appliedJobTitle, setAppliedJobTitle] = useState('');
+  const [appliedCountry, setAppliedCountry] = useState('');
+  const [appliedStatus, setAppliedStatus] = useState('');
+
+  // Data state
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters State
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedDept, setSelectedDept] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [selectedJobTitle, setSelectedJobTitle] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState('');
-
-  // Window height tracking for dynamic list size
-  const [listHeight, setListHeight] = useState(550);
-
-  // Debounce search query
+  // Disable page-level scroll while on this page
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  // Handle screen resize to dynamically size the virtual list height
-  useEffect(() => {
-    const handleResize = () => {
-      // Calculate height based on remaining space (leaving space for header, filters, pagination metadata)
-      const calculated = window.innerHeight - 360;
-      setListHeight(Math.max(calculated, 400)); // Minimum height of 400px
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
     };
-
-    window.addEventListener('resize', handleResize);
-    handleResize(); // Initial call
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Fetch filter options (Countries and Job Titles) on mount
+  // Load filter reference data (countries, job titles, departments)
   useEffect(() => {
     const loadFilters = async () => {
       try {
-        const [countriesData, jobTitlesData] = await Promise.all([
-          getCountries(),
-          getJobTitles(),
-        ]);
+        const [countriesData, jobTitlesData] = await Promise.all([getCountries(), getJobTitles()]);
         setCountries(countriesData);
         setJobTitles(jobTitlesData);
-
-        // Extract unique departments from job titles
         const depts = Array.from(
-          new Set(
-            jobTitlesData
-              .map((j) => j.department)
-              .filter((d): d is string => !!d)
-          )
+          new Set(jobTitlesData.map((j) => j.department).filter((d): d is string => !!d))
         ).sort();
         setDepartments(depts);
       } catch (err) {
@@ -77,363 +63,341 @@ export default function EmployeesPage() {
     loadFilters();
   }, []);
 
-  // Reset employees and page count when search or filters change
-  useEffect(() => {
-    setEmployees([]);
-    setPage(1);
-    setHasMore(true);
-  }, [debouncedSearch, selectedDept, selectedStatus, selectedJobTitle, selectedCountry]);
-
-  // Fetch employees data whenever filters or page changes
+  // Fetch employees on page or applied-filter change
   useEffect(() => {
     let isMounted = true;
-
     const fetchList = async () => {
       setIsLoading(true);
       setError(null);
       try {
         const response = await getEmployees({
-          search: debouncedSearch,
-          department: selectedDept,
-          status: selectedStatus,
-          jobTitleId: selectedJobTitle,
-          countryId: selectedCountry,
+          search: appliedSearch,
+          department: appliedDept,
+          status: appliedStatus,
+          jobTitleId: appliedJobTitle,
+          countryId: appliedCountry,
           page,
-          limit: 100, // Performance optimization: fetch 100 items per page
+          limit: PAGE_SIZE,
         });
-
         if (isMounted) {
-          setEmployees((prev) => {
-            if (page === 1) return response.data;
-
-            // Avoid double appending/duplicate IDs if fetches overlap
-            const existingIds = new Set(prev.map((e) => e.id));
-            const freshItems = response.data.filter((e) => !existingIds.has(e.id));
-            return [...prev, ...freshItems];
-          });
+          setEmployees(response.data);
           setTotalCount(response.meta.total);
-          setHasMore(page < response.meta.totalPages);
+          setTotalPages(response.meta.totalPages);
         }
-      } catch (err) {
-        if (isMounted) {
-          setError('Could not retrieve employee directory. Please check server connections.');
-        }
+      } catch {
+        if (isMounted) setError('Could not retrieve employee directory. Please check server connections.');
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
-
     fetchList();
+    return () => { isMounted = false; };
+  }, [page, appliedSearch, appliedDept, appliedStatus, appliedJobTitle, appliedCountry]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [page, debouncedSearch, selectedDept, selectedStatus, selectedJobTitle, selectedCountry]);
-
-  // Trigger loading next page when scrolling approaches the bottom
-  const handleRowsRendered = (visibleRows: { startIndex: number; stopIndex: number }) => {
-    // If the last visible item is close to the end of the loaded list, fetch next page
-    if (visibleRows.stopIndex >= employees.length - 20 && hasMore && !isLoading) {
-      setPage((prevPage) => prevPage + 1);
-    }
+  // Commit pending filters → triggers refetch
+  const applyFilters = () => {
+    setPage(1);
+    setAppliedSearch(pendingSearch);
+    setAppliedDept(pendingDept);
+    setAppliedJobTitle(pendingJobTitle);
+    setAppliedCountry(pendingCountry);
+    setAppliedStatus(pendingStatus);
   };
 
-  // Helper to format currency
-  const formatCurrency = (val: number, currencyCode: string = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currencyCode,
-      maximumFractionDigits: 0,
-    }).format(Number(val));
-  };
-
-  // Active employees count for dashboard-style header badge
-  const activeCount = useMemo(() => {
-    return employees.filter((e) => e.status === 'ACTIVE').length;
-  }, [employees]);
-
-  // Reset all filters
+  // Reset everything
   const resetFilters = () => {
-    setSearch('');
-    setSelectedDept('');
-    setSelectedStatus('');
-    setSelectedJobTitle('');
-    setSelectedCountry('');
+    setPendingSearch(''); setPendingDept(''); setPendingJobTitle('');
+    setPendingCountry(''); setPendingStatus('');
+    setPage(1);
+    setAppliedSearch(''); setAppliedDept(''); setAppliedJobTitle('');
+    setAppliedCountry(''); setAppliedStatus('');
   };
 
-  // Virtual Row Renderer
-  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
-    // If this is the loader row at the end of the list
-    if (index === employees.length) {
-      return (
-        <div
-          style={style}
-          className="flex items-center justify-center border-b border-slate-100 bg-slate-50/50 py-4 text-xs font-semibold tracking-wide text-slate-500"
-        >
-          <span className="mr-2.5 h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
-          Fetching additional staff records...
-        </div>
-      );
-    }
+  const hasFilters = !!(pendingSearch || pendingDept || pendingJobTitle || pendingCountry || pendingStatus);
 
-    const employee = employees[index];
-    if (!employee) return null;
+  // Format salary currency
+  const formatCurrency = (val: number, currencyCode = 'USD') =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode, maximumFractionDigits: 0 }).format(Number(val));
 
-    return (
-      <div
-        style={style}
-        className="flex items-center border-b border-slate-100 px-6 text-sm text-slate-700 transition-colors hover:bg-slate-50/70"
-      >
-        {/* Emp No Column */}
-        <div className="w-[10%] flex items-center pr-4">
-          <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-600 border border-slate-200">
-            {employee.employeeNo}
-          </span>
-        </div>
-
-        {/* Full Name Column */}
-        <div className="w-[18%] font-semibold text-slate-900 pr-4 truncate">
-          {employee.fullName}
-        </div>
-
-        {/* Email Column */}
-        <div className="w-[20%] text-slate-500 pr-4 truncate">
-          {employee.email}
-        </div>
-
-        {/* Department Column */}
-        <div className="w-[13%] pr-4 truncate">
-          {employee.department ? (
-            <span className="inline-flex rounded-full bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
-              {employee.department}
-            </span>
-          ) : (
-            <span className="text-slate-400 font-light">-</span>
-          )}
-        </div>
-
-        {/* Job Title Column */}
-        <div className="w-[14%] text-slate-600 pr-4 truncate">
-          {employee.jobTitle?.title || <span className="text-slate-400 font-light">-</span>}
-        </div>
-
-        {/* Country Column */}
-        <div className="w-[10%] pr-4 truncate text-slate-600 font-medium">
-          {employee.country?.name || <span className="text-slate-400 font-light">-</span>}
-        </div>
-
-        {/* Salary Column */}
-        <div className="w-[10%] text-right font-medium text-emerald-700 pr-4">
-          {formatCurrency(employee.salary, employee.currency)}
-        </div>
-
-        {/* Status Column */}
-        <div className="w-[5%] flex justify-center">
-          {employee.status === 'ACTIVE' ? (
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" title="Active"></span>
-            </span>
-          ) : (
-            <span className="h-2.5 w-2.5 rounded-full bg-slate-300" title="Inactive"></span>
-          )}
-        </div>
-      </div>
-    );
+  // Build paginator page numbers with ellipsis
+  const getPageNumbers = (): (number | '...')[] => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const pages: (number | '...')[] = [1];
+    if (page > 3) pages.push('...');
+    for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
+    if (page < totalPages - 2) pages.push('...');
+    pages.push(totalPages);
+    return pages;
   };
+
+  const selectClass =
+    'w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-700 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100';
+  const labelClass = 'block text-xs font-semibold text-slate-600 mb-1.5';
 
   return (
-    <div className="space-y-6">
-      {/* Header Info Panel */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl bg-gradient-to-r from-indigo-900 to-violet-950 p-6 text-white shadow-md shadow-indigo-900/10">
+    <div className="flex-1 flex min-h-0 gap-5">
+
+      {/* ────────────────────── Left Sidebar Filters ────────────────────── */}
+      <aside className="w-52 flex-shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm p-4 flex flex-col justify-between">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 font-bold text-slate-800 text-sm">
+            <Filter className="h-4 w-4 text-slate-500" />
+            Filters
+          </div>
+          <button
+            onClick={resetFilters}
+            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+          >
+            Clear all
+          </button>
+        </div>
+
+        {/* Search */}
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Staff Directory</h1>
-          <p className="mt-1.5 text-sm text-indigo-200/90 font-medium">
-            Manage, filter, and review corporate records. Virtualized to handle large-scale database loads.
-          </p>
-        </div>
-        <div className="flex gap-4">
-          <div className="rounded-xl bg-white/10 backdrop-blur-md px-4 py-2.5 border border-white/10 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-indigo-500/25 flex items-center justify-center text-indigo-300">
-              <Users className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-xs text-indigo-200 font-semibold uppercase tracking-wider">Total records</div>
-              <div className="text-lg font-bold font-mono">{totalCount.toLocaleString()}</div>
-            </div>
-          </div>
-          <div className="rounded-xl bg-white/10 backdrop-blur-md px-4 py-2.5 border border-white/10 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-emerald-500/25 flex items-center justify-center text-emerald-300">
-              <Activity className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-xs text-indigo-200 font-semibold uppercase tracking-wider">Loaded Active</div>
-              <div className="text-lg font-bold font-mono">{activeCount.toLocaleString()}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-            <SlidersHorizontal className="h-4.5 w-4.5 text-slate-500" />
-            <span>Search Filters</span>
-          </div>
-          {(search || selectedDept || selectedStatus || selectedJobTitle || selectedCountry) && (
-            <button
-              onClick={resetFilters}
-              className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
-            >
-              <RefreshCw className="h-3 w-3" />
-              Reset Filters
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {/* Search text input */}
+          <label className={labelClass}>Search</label>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
+              id="sidebar-search"
               type="text"
-              placeholder="Search by name, email, number..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 py-2 pl-9.5 pr-4 text-sm font-medium outline-none transition-all placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+              placeholder="Search by name, email..."
+              value={pendingSearch}
+              onChange={(e) => setPendingSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-sm text-slate-700 outline-none transition-all placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100"
             />
           </div>
-
-          {/* Department filter */}
-          <div>
-            <select
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm font-medium outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All Departments</option>
-              {departments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Job Title filter */}
-          <div>
-            <select
-              value={selectedJobTitle}
-              onChange={(e) => setSelectedJobTitle(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm font-medium outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All Job Titles</option>
-              {jobTitles.map((title) => (
-                <option key={title.id} value={title.id}>
-                  {title.title}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Country filter */}
-          <div>
-            <select
-              value={selectedCountry}
-              onChange={(e) => setSelectedCountry(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm font-medium outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All Countries</option>
-              {countries.map((country) => (
-                <option key={country.id} value={country.id}>
-                  {country.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status filter */}
-          <div>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm font-medium outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100"
-            >
-              <option value="">All Statuses</option>
-              <option value="ACTIVE">Active Only</option>
-              <option value="INACTIVE">Inactive Only</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Table Area */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        {/* Sticky Table Header */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-6 py-3.5 text-xs font-bold uppercase tracking-wider text-slate-500 select-none">
-          <div className="w-[10%]">Emp No</div>
-          <div className="w-[18%]">Full Name</div>
-          <div className="w-[20%]">Email Address</div>
-          <div className="w-[13%]">Department</div>
-          <div className="w-[14%]">Job Title</div>
-          <div className="w-[10%]">Country</div>
-          <div className="w-[10%] text-right">Salary</div>
-          <div className="w-[5%] text-center">Status</div>
         </div>
 
-        {/* List Content */}
-        {error ? (
-          <div className="flex flex-col items-center justify-center p-16 text-center">
-            <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
-            <p className="text-sm font-bold text-slate-800">{error}</p>
-            <button
-              onClick={() => setPage(page)}
-              className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
-            >
-              Retry Connection
-            </button>
-          </div>
-        ) : employees.length === 0 && !isLoading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <Users className="h-12 w-12 text-slate-300 mb-3" />
-            <h3 className="text-sm font-bold text-slate-700">No staff matches found</h3>
-            <p className="text-xs text-slate-400 mt-1 max-w-xs">
-              Try adjusting search keywords or clearing active filters to search the directory again.
-            </p>
-          </div>
-        ) : (
-          <div className="w-full">
-            <List<{}>
-              rowCount={employees.length + (hasMore ? 1 : 0)}
-              rowHeight={52}
-              rowComponent={Row}
-              rowProps={{}}
-              onRowsRendered={handleRowsRendered}
-              style={{ height: listHeight, width: '100%' }}
-              className="scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent"
-            />
-          </div>
-        )}
-      </div>
+        {/* Department */}
+        <div>
+          <label className={labelClass}>Department</label>
+          <select id="sidebar-dept" value={pendingDept} onChange={(e) => setPendingDept(e.target.value)} className={selectClass}>
+            <option value="">All Departments</option>
+            {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
 
-      {/* Footer Info Summary Row */}
-      {!error && employees.length > 0 && (
-        <div className="flex items-center justify-between text-xs font-semibold text-slate-500 px-2 select-none">
-          <div>
-            Showing <span className="text-slate-800 font-bold">{employees.length.toLocaleString()}</span> of{' '}
-            <span className="text-slate-800 font-bold">{totalCount.toLocaleString()}</span> employees
+        {/* Job Title */}
+        <div>
+          <label className={labelClass}>Job Title</label>
+          <select id="sidebar-jobtitle" value={pendingJobTitle} onChange={(e) => setPendingJobTitle(e.target.value)} className={selectClass}>
+            <option value="">All Job Titles</option>
+            {jobTitles.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+          </select>
+        </div>
+
+        {/* Country */}
+        <div>
+          <label className={labelClass}>Country</label>
+          <select id="sidebar-country" value={pendingCountry} onChange={(e) => setPendingCountry(e.target.value)} className={selectClass}>
+            <option value="">All Countries</option>
+            {countries.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+
+        {/* Status */}
+        <div>
+          <label className={labelClass}>Status</label>
+          <select id="sidebar-status" value={pendingStatus} onChange={(e) => setPendingStatus(e.target.value)} className={selectClass}>
+            <option value="">All Statuses</option>
+            <option value="ACTIVE">Active Only</option>
+            <option value="INACTIVE">Inactive Only</option>
+          </select>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-2 pt-1">
+          <button
+            id="apply-filters-btn"
+            onClick={applyFilters}
+            className="flex items-center justify-center gap-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm shadow-indigo-200 hover:bg-indigo-700 transition-colors"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Apply Filters
+          </button>
+          <button
+            id="reset-filters-btn"
+            onClick={resetFilters}
+            className="flex items-center justify-center gap-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Reset Filters
+          </button>
+        </div>
+      </aside>
+
+      {/* ────────────────────── Right Table Column ────────────────────── */}
+      <div className="flex-1 min-h-0 flex flex-col gap-3">
+
+        {/* Header Banner */}
+        <div className="flex-shrink-0 flex items-center justify-between rounded-xl bg-gradient-to-r from-indigo-900 to-violet-950 py-3 px-5 text-white shadow-sm">
+          <h1 className="text-base font-bold tracking-tight">Staff Directory</h1>
+          <div className="rounded-lg bg-white/10 backdrop-blur-md px-2.5 py-1 border border-white/10 flex items-center gap-1.5 text-xs">
+            <Users className="h-3.5 w-3.5 text-indigo-300" />
+            <span className="text-indigo-200 font-semibold">
+              Total: <span className="text-white font-bold font-mono">{totalCount.toLocaleString()}</span>
+            </span>
           </div>
-          {isLoading && (
-            <div className="flex items-center gap-1.5 text-indigo-600">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border border-indigo-600 border-t-transparent" />
-              Loading batch...
+        </div>
+
+        {/* Table Card */}
+        <div className="flex-1 min-h-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
+
+          {/* Sticky Column Headers */}
+          <div className="flex-shrink-0 flex border-b border-slate-200 bg-slate-50/80 px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-400 select-none">
+            <div className="w-[10%]">Emp No</div>
+            <div className="w-[16%]">Full Name</div>
+            <div className="w-[21%]">Email Address</div>
+            <div className="w-[13%]">Department</div>
+            <div className="w-[17%]">Job Title</div>
+            <div className="w-[9%]">Country</div>
+            <div className="w-[9%] text-right">Salary</div>
+            <div className="w-[5%] text-center">Status</div>
+          </div>
+
+          {/* Scrollable Rows */}
+          <div className="flex-1 overflow-y-auto">
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-3 py-20 text-sm text-slate-500">
+                <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+                Loading records...
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center p-16 text-center">
+                <AlertCircle className="h-10 w-10 text-red-500 mb-3" />
+                <p className="text-sm font-bold text-slate-800">{error}</p>
+                <button
+                  onClick={() => setPage(page)}
+                  className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors"
+                >
+                  Retry Connection
+                </button>
+              </div>
+            ) : employees.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <Users className="h-12 w-12 text-slate-300 mb-3" />
+                <h3 className="text-sm font-bold text-slate-700">No staff matches found</h3>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                  Try adjusting the filters or click Reset Filters to clear all active criteria.
+                </p>
+              </div>
+            ) : (
+              employees.map((employee) => (
+                <div
+                  key={employee.id}
+                  className="flex items-center border-b border-slate-100 px-5 py-3 text-sm text-slate-700 transition-colors hover:bg-slate-50/60 last:border-b-0"
+                >
+                  {/* Emp No */}
+                  <div className="w-[10%] pr-3">
+                    <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-600 border border-slate-200">
+                      {employee.employeeNo}
+                    </span>
+                  </div>
+                  {/* Full Name */}
+                  <div className="w-[16%] font-semibold text-slate-900 pr-3 truncate">{employee.fullName}</div>
+                  {/* Email */}
+                  <div className="w-[21%] text-slate-500 pr-3 truncate">{employee.email}</div>
+                  {/* Department */}
+                  <div className="w-[13%] pr-3 truncate">
+                    {employee.department ? (
+                      <span className="inline-flex rounded-full bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                        {employee.department}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </div>
+                  {/* Job Title */}
+                  <div className="w-[17%] text-slate-600 pr-3 truncate">
+                    {employee.jobTitle?.title || <span className="text-slate-400">—</span>}
+                  </div>
+                  {/* Country */}
+                  <div className="w-[9%] text-slate-700 font-medium pr-3 truncate">
+                    {employee.country?.name || <span className="text-slate-400">—</span>}
+                  </div>
+                  {/* Salary */}
+                  <div className="w-[9%] text-right font-semibold text-emerald-600 pr-3">
+                    {formatCurrency(employee.salary, employee.currency)}
+                  </div>
+                  {/* Status */}
+                  <div className="w-[5%] flex justify-center">
+                    {employee.status === 'ACTIVE' ? (
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" title="Active" />
+                      </span>
+                    ) : (
+                      <span className="h-2.5 w-2.5 rounded-full bg-slate-300" title="Inactive" />
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Pagination Footer */}
+          {!error && totalCount > 0 && (
+            <div className="flex-shrink-0 flex items-center justify-between border-t border-slate-100 bg-white px-5 py-3">
+              {/* Row count summary */}
+              <p className="text-xs text-slate-500 select-none">
+                Showing{' '}
+                <span className="font-bold text-slate-800">
+                  {employees.length > 0 ? ((page - 1) * PAGE_SIZE + 1) : 0}–{Math.min(page * PAGE_SIZE, totalCount)}
+                </span>{' '}
+                of{' '}
+                <span className="font-bold text-slate-800">{totalCount.toLocaleString()}</span> employees
+              </p>
+
+              {/* Page number controls */}
+              <div className="flex items-center gap-1">
+                {/* Previous */}
+                <button
+                  id="page-prev"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex h-7 w-7 items-center justify-center rounded border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+
+                {/* Numbered pages */}
+                {getPageNumbers().map((p, i) =>
+                  p === '...' ? (
+                    <span key={`ell-${i}`} className="flex h-7 w-7 items-center justify-center text-xs text-slate-400 select-none">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      id={`page-${p}`}
+                      onClick={() => setPage(p as number)}
+                      className={`flex h-7 w-7 items-center justify-center rounded text-xs font-semibold transition-colors ${
+                        page === p
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+
+                {/* Next */}
+                <button
+                  id="page-next"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="flex h-7 w-7 items-center justify-center rounded border border-slate-200 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
